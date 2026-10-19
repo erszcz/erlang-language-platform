@@ -1,0 +1,214 @@
+---
+sidebar_position: 52
+---
+
+import { FbInternalOnly } from 'docusaurus-plugin-internaldocs-fb/internal';
+import MetaOnlyW0052 from '../../../fb/components/_W0052.md';
+
+# W0052 - Avoid `catch`
+
+## Warning
+
+```erlang
+-module(main).
+-export([catcher/2]).
+
+catcher(X,Y) ->
+case catch X/Y of
+  %% ^^^^^ warning: Avoid `catch`.
+  {'EXIT', {badarith,_}} -> "uh oh";
+  N -> N
+end.
+```
+
+## Explanation
+
+The expression `catch Expr` is deprecated and will be removed. Use `try ... catch ... end` instead.
+
+## `catch` Semantics (Critical)
+
+The `catch Expr` syntax has problematic semantics: it discards error locations,
+conflates errors/exits/throws, and mixes thrown values with normal returns.
+
+Before converting, understand how `catch` transforms exceptions into values.
+The naive equivalent of `catch Expr` is:
+
+```erlang
+try Expr
+catch
+    throw:Reason -> Reason;
+    error:Reason:Stack -> {'EXIT', {Reason, Stack}};
+    exit:Reason -> {'EXIT', Reason}
+end.
+```
+
+**Key insight**: Calling `throw(Term)` returns `Term` directly, NOT wrapped in `{'EXIT', ...}`.
+
+## Before Converting: Question the `catch`
+
+> 💡 Don't blindly convert `catch` to `try...catch`. First, question whether the
+> `catch` should exist at all.
+
+Many `catch` expressions are unnecessary:
+- **Defensive programming that masks bugs**: Silently swallowing exceptions hides real problems
+- **Cargo-culted patterns**: Added "just in case" without understanding if exceptions can occur
+- **Outdated protections**: The called code may no longer throw exceptions
+
+**Ask yourself:**
+1. **Can the called function actually raise an exception? If not, remove the `catch` entirely**.
+2. Should exceptions propagate to a supervisor instead? (Let it crash philosophy)
+3. Is this hiding a bug that should be fixed?
+4. How are the callers handling the exceptions?
+
+**Example: Remove unnecessary `catch`**
+
+```erlang
+%% OLD - unnecessary defensive catch
+get_value(Key) ->
+    case catch ets:lookup(my_table, Key) of
+        {'EXIT', _} -> undefined;
+        [{Key, Value}] -> Value;
+        [] -> undefined
+    end.
+
+%% BETTER - if table is guaranteed to exist, remove catch entirely
+get_value(Key) ->
+    case ets:lookup(my_table, Key) of
+        [{Key, Value}] -> Value;
+        [] -> undefined
+    end.
+```
+
+**Example: Callers already handle exceptions**
+```erlang
+parent(Foo) ->
+    case catch child(Foo) of
+        {'EXIT', _} -> parent_failed;
+        Other -> Other
+    end.
+
+%% OLD - unnecessary nested catch
+child(Foo) ->
+    catch nested_call(Foo).
+
+%% BETTER - remove nested catch, let parent handle it
+child(Foo) ->
+    nested_call(Foo).
+```
+
+## Converting `catch` (When Necessary)
+
+Only proceed if you've determined the `catch` is actually needed.
+
+### Case 1: Result is ignored (side effects only)
+
+Safe to use `catch _:_ -> ok`:
+
+```erlang
+%% OLD
+sum(X, Y) ->
+  catch could_crash(X),
+  X + Y.
+
+%% NEW - safe conversion
+sum(X, Y) ->
+  try could_crash(X)
+  catch _:_ -> ok
+  end,
+  X + Y.
+```
+
+**Note on `_ = catch Expr`**: If the original code assigns the result to `_`,
+drop the `_ =` when converting. The `_ =` was there to signal intent and
+suppress Dialyzer warnings — it is not needed with `try...catch...end`.
+
+### Case 2: Result is used only for control flow
+
+Only proceed if you've determined the `catch` is actually needed, the code has simple
+error handling and the called function doesn't explicitly use `throw`:
+
+```erlang
+%% OLD
+case catch convert_to_float(Amount) of
+    0.0 -> Default;
+    _ -> Amount
+end.
+
+%% BETTER - simple conversion
+try convert_to_float(Amount) of
+    0.0 -> Default;
+    _ -> Amount
+catch
+    _:_ -> Amount
+end.
+```
+
+### Case 3: Result is used (returned or passed to a function)
+
+🚨 **HIGH RISK** - You must reconstruct the exception value.
+
+**Recommended approach**: Separate exception reconstruction from result handling.
+This avoids code duplication and is easier to maintain:
+
+```erlang
+%% OLD - catch-all passes result (including exceptions) to PrintFun
+case catch do_request(Req) of
+    {ok, Value} ->
+        use_value(Value);
+    Other ->
+        PrintFun(Other)  %% Also receives {'EXIT', ...} on exceptions!
+end.
+
+%% RECOMMENDED - separate construction from usage
+Result =
+    try do_request(Req)
+    catch
+        throw:Reason -> Reason;
+        error:Reason:Stack -> {'EXIT', {Reason, Stack}};
+        exit:Reason -> {'EXIT', Reason}
+    end,
+case Result of
+    {ok, Value} ->
+        use_value(Value);
+    Other ->
+        PrintFun(Other)
+end.
+```
+
+**Simplify where possible**: Not every conversion needs the full EXIT reconstruction pattern.
+Analyze what exception types are actually expected and use the simplest form that works.
+
+**Throw-only code**: If the called function only uses `throw`, catch only throws:
+
+```erlang
+%% OLD
+Result = catch check_input(Data),
+
+%% GOOD - only throws are expected, so only catch throws
+Result =
+    try check_input(Data)
+    catch Term -> Term %% throw class is default
+    end,
+```
+
+## Quick Reference Checklist
+
+| Situation | Action |
+|-----------|--------|
+| Called function can't raise exceptions | Remove `catch` entirely |
+| Should crash and restart | Remove `catch`, let supervisor handle it |
+| All callers already handle exceptions | Remove internal `catch`, let caller handle it |
+| Result ignored (side effects only) | `catch _:_ -> ok` is safe |
+| Result returned or passed to function | Must reconstruct exception values (see Case 3) |
+| Matches `{'EXIT', ...}` | Convert to `error:/exit:` handlers |
+| Has catch-all clause (`Other ->`) | 🚨 Check if it processes exceptions too |
+| Only `throw` exceptions expected | Catch only `Term -> Term` |
+| Multiple sequential `catch` expressions | ⚠️ Don't combine into one `try`—if first fails, second won't run |
+
+## See also
+
+- [Errors and Error Handling](https://www.erlang.org/doc/system/errors.html)
+- [Deprecating catch in Erlang](https://github.com/erlang/otp/pull/9154)
+- [Dealing with exceptions](https://learnyousomeerlang.com/errors-and-exceptions)
+
+<FBInternalOnly><MetaOnlyW0052 /></FBInternalOnly>
