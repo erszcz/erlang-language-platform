@@ -34,7 +34,7 @@ form before and after, and argue from Elixir's semantics why the
 rewritten form is what the code means. A rewrite that exists because the
 checker mishandles the original form is not acceptable; fix the checker.
 
-Two rewrites are approved so far:
+Three rewrites are approved so far:
 
 - the bodies of compiler-generated functions are left out, keeping their
   specs and exports (`reject_generated_functions` in
@@ -43,3 +43,9 @@ Two rewrites are approved so far:
   `dynamic()`. Even there, prefer overriding the specs of the functions
   involved with type variables, and keep `dynamic()` only for what no
   spec can express.
+- the calls of `:erlang.++/2` and `:erlang.--/2`, which Elixir compiles
+  `++` and `--` to where every other operator becomes the Erlang operator
+  form, are served as the operator forms (`calls_to_operators` in
+  `lib/elixir_service/lint.ex`): they mean the same, and eqWAlizer's rule
+  for the operators keeps the element types that the BIFs' specs lose to
+  `term()`.

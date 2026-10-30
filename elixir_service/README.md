@@ -46,6 +46,12 @@ node starts. Functions the compiler generates, such as `__struct__/1`, are
 not checked, but their specs and exports are kept so calls to them are.
 Functions without a spec are dynamically typed, as in Erlang.
 
+Elixir compiles `++` and `--` to calls of `:erlang.++/2` and `:erlang.--/2`,
+where every other operator becomes the Erlang operator. The service serves
+those calls as the operators too, which eqWAlizer types by a rule of its own
+that keeps the element types of the lists, where the specs of the functions
+would lose them to `term()`.
+
 The standard library's specs declare elements, values and accumulators as
 `any()`, which eqWAlizer reads as a `term()` that fits nowhere specific, and
 return containers as `map()` or `acc()`, so a struct threaded through

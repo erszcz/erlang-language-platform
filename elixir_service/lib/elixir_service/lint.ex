@@ -27,6 +27,7 @@ defmodule ElixirService.Lint do
       forms =
         forms
         |> reject_generated_functions()
+        |> calls_to_operators()
         |> Anno.to_byte_ranges(text)
         |> insert_metadata(options)
 
@@ -68,6 +69,38 @@ defmodule ElixirService.Lint do
     name = Atom.to_string(name)
     String.starts_with?(name, "__") and String.ends_with?(name, "__")
   end
+
+  # Elixir compiles `a ++ b` and `a -- b` to calls of `:erlang.++/2` and
+  # `:erlang.--/2`, where every other operator becomes the Erlang operator
+  # form. eqWAlizer types the operator forms of `++` and `--` by a rule of
+  # its own, which keeps the element types of the lists, and the calls by the
+  # specs of the BIFs, which lose them to `term()`. The calls mean the same as
+  # the operators, so they are served as such.
+  defp calls_to_operators(forms) do
+    Enum.map(forms, fn
+      {:function, anno, name, arity, clauses} ->
+        {:function, anno, name, arity, call_to_operator(clauses)}
+
+      form ->
+        form
+    end)
+  end
+
+  @list_operators [:++, :--]
+
+  defp call_to_operator(
+         {:call, anno, {:remote, _, {:atom, _, :erlang}, {:atom, _, op}}, [left, right]}
+       )
+       when op in @list_operators do
+    {:op, anno, op, call_to_operator(left), call_to_operator(right)}
+  end
+
+  defp call_to_operator(tuple) when is_tuple(tuple) do
+    tuple |> Tuple.to_list() |> call_to_operator() |> List.to_tuple()
+  end
+
+  defp call_to_operator(list) when is_list(list), do: Enum.map(list, &call_to_operator/1)
+  defp call_to_operator(term), do: term
 
   defp fetch_ebin(options) do
     case List.keyfind(options, :ebin, 0) do

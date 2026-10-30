@@ -39,6 +39,19 @@ defmodule ElixirService.LintTest do
            end)
   end
 
+  test "serves the calls of ++ and -- as the operators, at the call's position", ctx do
+    assert {:ok, [{"AST", ast}]} = run(ctx, [{:ebin, ctx.ebin}, {:module, Hello}])
+    assert {:ok, forms, []} = :erlang.binary_to_term(IO.iodata_to_binary(ast))
+
+    for {name, op, source} <- [{:concat, :++, "++ b"}, {:subtract, :--, "-- b"}] do
+      assert {:function, _, ^name, 2, [{:clause, _, _, _, [body]}]} =
+               Enum.find(forms, &match?({:function, _, ^name, 2, _}, &1))
+
+      {start, _} = :binary.match(ctx.text, source)
+      assert {:op, {^start, _}, ^op, {:var, _, _}, {:var, _, _}} = body
+    end
+  end
+
   test "serves a module from its BEAM file, without positions", ctx do
     beam = Path.join(ctx.ebin, "Elixir.Hello.beam")
     assert {:ok, [{"AST", ast}]} = Lint.run(1, [beam, 1, [], "", &post_process/2, true])
