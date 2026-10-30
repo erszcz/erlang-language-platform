@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.10.0">
 <title data-rh="true">Elixir Projects | ELP</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/elixir/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Elixir Projects | ELP"><meta data-rh="true" name="description" content="eqWAlizer can type-check Elixir code. The Elixir compiler records the Erlang"><meta data-rh="true" property="og:description" content="eqWAlizer can type-check Elixir code. The Elixir compiler records the Erlang"><link data-rh="true" rel="icon" href="/erlang-language-platform/img/elp_icon_color.svg"><link data-rh="true" rel="canonical" href="https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/elixir/"><link data-rh="true" rel="alternate" href="https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/elixir/" hreflang="en"><link data-rh="true" rel="alternate" href="https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/elixir/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Get Started","item":"https://whatsapp.github.io/erlang-language-platform/docs/get-started/"},{"@type":"ListItem","position":2,"name":"Configure Your Project","item":"https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/"},{"@type":"ListItem","position":3,"name":"Elixir Projects","item":"https://whatsapp.github.io/erlang-language-platform/docs/get-started/configure-project/elixir"}]}</script><link rel="stylesheet" href="/erlang-language-platform/assets/css/styles.fdd88167.css">
-<script src="/erlang-language-platform/assets/js/runtime~main.7f940a40.js" defer="defer"></script>
-<script src="/erlang-language-platform/assets/js/main.d7607b07.js" defer="defer"></script>
+<script src="/erlang-language-platform/assets/js/runtime~main.2217573a.js" defer="defer"></script>
+<script src="/erlang-language-platform/assets/js/main.2ebcfd43.js" defer="defer"></script>
 </head>
 <body>
 <svg style="display: none;"><defs>
@@ -52,6 +52,11 @@ at the start of the expression, since the Elixir compiler records only where
 a node starts.</p>
 <p>Functions the compiler generates, such as <code>__struct__/1</code> and <code>__info__/1</code>,
 are not checked, but their specs and exports are kept, so calls to them are.</p>
+<p>Elixir compiles <code>++</code> and <code>--</code> to calls of <code>:erlang.++/2</code> and <code>:erlang.--/2</code>,
+where every other operator becomes the Erlang operator. ELP&#x27;s service serves
+those calls as the operators too, which eqWAlizer types by a rule of its own
+that keeps the element types of the lists, where the specs of the functions
+would lose them to <code>term()</code>.</p>
 <p>The Elixir standard library is seen through its specs, with overrides for
 the ones that would otherwise produce noise. Elixir declares the elements of
 enumerables, the values of maps and keyword lists, and accumulators as
